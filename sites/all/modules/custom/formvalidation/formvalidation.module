@@ -1,0 +1,64 @@
+<?php
+
+function formvalidation_menu() {
+  $items = array();
+
+  $items['formvalidation'] = array( //this creates a URL that will call this form at "examples/form-example"
+    'title' => 'Example Form', //page title
+    'description' => 'A form to mess around with.',
+    'page callback' => 'drupal_get_form', //this is the function that will be called when the page is accessed.  for a form, use drupal_get_form
+    'page arguments' => array('form_example_form'), //put the name of the form here
+    'access callback' => TRUE
+  );
+
+  return $items;
+}
+
+function form_example_form($form, &$form_state) {
+  
+ $form['price'] = array(
+    '#type' => 'textfield', //you can find a list of available types in the form api
+    '#title' => 'Enter the table',
+     '#name' => 'text',
+    '#size' => 10,
+    '#maxlength' => 10,
+    '#required' => False, //make this field required 
+    //$form['#action'] = url('');
+
+  );
+
+  $form['submit_button'] = array(
+    '#type' => 'submit',
+    '#value' => t('Click Here!'),
+   /* $form['#action'] = url('');
+$form['#method'] = 'get';*/
+  );
+  
+  return $form;
+}
+
+
+function form_example_form_submit($form, &$form_state) {
+
+  $a =  $form_state['input']['text'];
+  $result = "";
+  for($i=1;$i<=15;$i++)
+  {
+ $result = $i."*".$a."=".$i*$a."<br>";
+
+  }
+
+  // echo "<pre>";
+  // print_r($form);
+  // die;
+
+  //return $result;
+ $form_state['storage']['text'] =   $result;
+    // Then we set $form_state['rebuild'] to TRUE, so that the values stored in
+    // $form_state['storage'] are available in the form definition.
+    $form_state['rebuild'] = TRUE;
+
+
+  //drupal_set_message(t('The form has been submitted.'));
+}
+

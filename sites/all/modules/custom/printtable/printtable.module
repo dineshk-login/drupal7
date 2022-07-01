@@ -1,0 +1,49 @@
+<?php
+/**
+ * @file
+ * Hello World demonstrates the use of SimpleTest for Drupal 7.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function printtable_menu() {
+  $items = array();
+
+  $items['printtable'] = array(
+    'title' => 'print table',
+    'access callback' => TRUE,
+    'page callback' => 'printtable_hello_page',
+    'type' => MENU_NORMAL_ITEM,
+    'menu' => 'navigation',
+  );
+
+  return $items;
+}
+
+/**
+ * Page callback for /helloworld.
+ */
+function printtable_hello_page() {
+ //$result;
+ //$a;
+ //$i; 
+
+$result1['printtable'] = array(
+'#type' =>'textfield' ,
+'#title' => 'enterthe table',
+    '#size' => 10,
+    '#maxlength' => 10,
+    '#required' => TRUE,
+);
+$a=2;
+
+for($i=1;$i<=15;$i++)
+    {
+   
+
+    @$result .= $i."*".$a."=".$i*$a."<br>";
+
+    }
+      return ($result);
+}

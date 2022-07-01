@@ -1,0 +1,73 @@
+<?php
+function registerform_menu() {
+  $items = array();
+$items['registerform'] = array( 
+    'title' => 'Example Form', //page title
+    'description' => 'A form to mess around with.',
+    'page callback' => 'drupal_get_form', //this is the function that will be called when the page is accessed.  for a form, use drupal_get_form
+    'page arguments' => array('form_example_form'), //put the name of the form here
+    'access callback' => TRUE
+  );
+  return $items;
+}
+ 
+function form_example1_form($form, &$form_state) {
+   $form['firstname'] = array(
+    '#type' => 'textfield', //you can find a list of available types in the form api
+    '#title' => 'enter your first name',
+    '#size' => 10,
+    '#maxlength' => 10,
+    '#required' => TRUE, //make this field required 
+  );
+   $form['lastname'] = array(
+    '#type' => 'textfield', //you can find a list of available types in the form api
+    '#title' => 'enter your last name',
+    '#size' => 10,
+    '#maxlength' => 10,
+    '#required' => FALSE, //make this field required 
+  );
+
+ $form['email'] = array(
+    '#type' => 'textfield', //you can find a list of available types in the form api
+    '#title' => 'enter your email',
+    '#size' => 10,
+    '#maxlength' => 10,
+    '#required' => TRUE, //make this field required 
+  );
+ $form['address'] = array(
+    '#type' => 'textfield', //you can find a list of available types in the form api
+    '#title' => 'enter your address',
+    '#size' => 10,
+    '#maxlength' => 20,
+    '#required' => TRUE, //make this field required 
+  );
+
+ $form['submit_button'] = array(
+    '#type' => 'submit',
+    '#value' => t('SUBMIT'), );
+// $form['redirect'] = 'http://localhost/drupal/helloworld';
+
+
+  return $form;
+}
+function registerform_form_submit_rmv($form, &$form_state) {
+ // drupal_set_message(t('The form has been submitted.'));
+} 
+
+ 
+function registerform_form_submit($form, &$form_state) {
+     print_r($form_state['values'] ['lastname']);
+       // die();
+   //$form_state['values'];
+   drupal_set_message(t('The form has been submitted.'));
+   die;
+} 
+
+// function form_example_form_validate($form, &$form_state) {
+//   if (!($form_state['values']['price'] > 0)){
+//     form_set_error('price', t('Price must be a positive number.'));
+//   }
+// }
+// function form_example_form_submit($form, &$form_state) {
+// }
+?>

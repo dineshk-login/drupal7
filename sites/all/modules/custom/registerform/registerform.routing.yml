@@ -1,0 +1,6 @@
+reggisterform.register_form:
+  path: '/registerform'
+  defaults:
+    _content: '\Drupal\registerform\Controller\registerformController::display_text'
+  requirements:
+    _permission: 'view registerform'
