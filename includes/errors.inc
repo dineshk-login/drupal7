@@ -1,30 +1,17 @@
 <?php
-// $Id: errors.inc,v 1.9 2010/10/16 00:00:16 webchick Exp $
 
 /**
  * @file
- * Functions for error handling
+ * Functions for error handling.
  */
 
 /**
- * Error reporting level: display no errors.
- */
-define('ERROR_REPORTING_HIDE', 0);
-
-/**
- * Error reporting level: display errors and warnings.
- */
-define('ERROR_REPORTING_DISPLAY_SOME', 1);
-
-/**
- * Error reporting level: display all messages.
- */
-define('ERROR_REPORTING_DISPLAY_ALL', 2);
-
-/**
- * Map PHP error constants to watchdog severity levels.
+ * Maps PHP error constants to watchdog severity levels.
+ *
  * The error constants are documented at
- * http://php.net/manual/en/errorfunc.constants.php
+ * http://php.net/manual/errorfunc.constants.php
+ *
+ * @ingroup logging_severity_levels
  */
 function drupal_error_levels() {
   $types = array(
@@ -51,7 +38,7 @@ function drupal_error_levels() {
 }
 
 /**
- * Custom PHP error handler.
+ * Provides custom PHP error handling.
  *
  * @param $error_level
  *   The level of the error raised.
@@ -61,10 +48,8 @@ function drupal_error_levels() {
  *   The filename that the error was raised in.
  * @param $line
  *   The line number the error was raised at.
- * @param $context
- *   An array that points to the active symbol table at the point the error occurred.
  */
-function _drupal_error_handler_real($error_level, $message, $filename, $line, $context) {
+function _drupal_error_handler_real($error_level, $message, $filename, $line) {
   if ($error_level & error_reporting()) {
     $types = drupal_error_levels();
     list($severity_msg, $severity_level) = $types[$error_level];
@@ -78,7 +63,7 @@ function _drupal_error_handler_real($error_level, $message, $filename, $line, $c
     _drupal_log_error(array(
       '%type' => isset($types[$error_level]) ? $severity_msg : 'Unknown error',
       // The standard PHP error handler considers that the error messages
-      // are HTML. We mimick this behavior here.
+      // are HTML. We mimic this behavior here.
       '!message' => filter_xss_admin($message),
       '%function' => $caller['function'],
       '%file' => $caller['file'],
@@ -89,10 +74,11 @@ function _drupal_error_handler_real($error_level, $message, $filename, $line, $c
 }
 
 /**
- * Decode an exception, especially to retrive the correct caller.
+ * Decodes an exception and retrieves the correct caller.
  *
  * @param $exception
  *   The exception object that was thrown.
+ *
  * @return
  *   An error in the format expected by _drupal_log_error().
  */
@@ -125,7 +111,7 @@ function _drupal_decode_exception($exception) {
   return array(
     '%type' => get_class($exception),
     // The standard PHP exception handler considers that the exception message
-    // is plain-text. We mimick this behavior here.
+    // is plain-text. We mimic this behavior here.
     '!message' => check_plain($message),
     '%function' => $caller['function'],
     '%file' => $caller['file'],
@@ -135,7 +121,7 @@ function _drupal_decode_exception($exception) {
 }
 
 /**
- * Render an error message for an exception without any possibility of a further exception occuring.
+ * Renders an exception error message without further exceptions.
  *
  * @param $exception
  *   The exception object that was thrown.
@@ -170,17 +156,17 @@ function error_displayable($error = NULL) {
 }
 
 /**
- * Log a PHP error or exception, display an error page in fatal cases.
+ * Logs a PHP error or exception and displays an error page in fatal cases.
  *
  * @param $error
- *   An array with the following keys: %type, !message, %function, %file, %line.
- *   All the parameters are plain-text, exception message, which needs to be
- *   a safe HTML string.
+ *   An array with the following keys: %type, !message, %function, %file, %line
+ *   and severity_level. All the parameters are plain-text, with the exception
+ *   of !message, which needs to be a safe HTML string.
  * @param $fatal
  *   TRUE if the error is fatal.
  */
 function _drupal_log_error($error, $fatal = FALSE) {
-  // Initialize a maintenance theme if the boostrap was not complete.
+  // Initialize a maintenance theme if the bootstrap was not complete.
   // Do it early because drupal_set_message() triggers a drupal_theme_initialize().
   if ($fatal && (drupal_get_bootstrap_phase() != DRUPAL_BOOTSTRAP_FULL)) {
     unset($GLOBALS['theme']);
@@ -210,7 +196,16 @@ function _drupal_log_error($error, $fatal = FALSE) {
     $number++;
   }
 
-  watchdog('php', '%type: !message in %function (line %line of %file).', $error, $error['severity_level']);
+  // Log the error immediately, unless this is a non-fatal error which has been
+  // triggered via drupal_trigger_error_with_delayed_logging(); in that case
+  // trigger it in a shutdown function. Fatal errors are always triggered
+  // immediately since for a fatal error the page request will end here anyway.
+  if (!$fatal && drupal_static('_drupal_trigger_error_with_delayed_logging')) {
+    drupal_register_shutdown_function('watchdog', 'php', '%type: !message in %function (line %line of %file).', $error, $error['severity_level']);
+  }
+  else {
+    watchdog('php', '%type: !message in %function (line %line of %file).', $error, $error['severity_level']);
+  }
 
   if ($fatal) {
     drupal_add_http_header('Status', '500 Service unavailable (with message)');
@@ -226,14 +221,16 @@ function _drupal_log_error($error, $fatal = FALSE) {
 
   if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest') {
     if ($fatal) {
-      // When called from JavaScript, simply output the error message.
-      print t('%type: !message in %function (line %line of %file).', $error);
+      if (error_displayable($error)) {
+        // When called from JavaScript, simply output the error message.
+        print t('%type: !message in %function (line %line of %file).', $error);
+      }
       exit;
     }
   }
   else {
     // Display the message if the current error reporting level allows this type
-    // of message to be displayed, and unconditionnaly in update.php.
+    // of message to be displayed, and unconditionally in update.php.
     if (error_displayable($error)) {
       $class = 'error';
 
@@ -262,6 +259,7 @@ function _drupal_log_error($error, $fatal = FALSE) {
  *
  * @param $backtrace
  *   A standard PHP backtrace.
+ *
  * @return
  *   An associative array with keys 'file', 'line' and 'function'.
  */

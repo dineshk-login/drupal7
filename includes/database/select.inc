@@ -1,8 +1,7 @@
 <?php
-// $Id: select.inc,v 1.59 2010/12/31 20:43:43 webchick Exp $
 
 /**
- * @ingroup database
+ * @addtogroup database
  * @{
  */
 
@@ -378,7 +377,8 @@ interface SelectQueryInterface extends QueryConditionInterface, QueryAlterableIn
    * @param $field
    *   The field on which to order.
    * @param $direction
-   *   The direction to sort. Legal values are "ASC" and "DESC".
+   *   The direction to sort. Legal values are "ASC" and "DESC". Any other value
+   *   will be converted to "ASC".
    * @return SelectQueryInterface
    *   The called object.
    */
@@ -415,7 +415,7 @@ interface SelectQueryInterface extends QueryConditionInterface, QueryAlterableIn
    * @param $start
    *   The first record from the result set to return. If NULL, removes any
    *   range directives that are set.
-   * @param $limit
+   * @param $length
    *   The number of records to return from the result set.
    * @return SelectQueryInterface
    *   The called object.
@@ -550,17 +550,31 @@ class SelectQueryExtender implements SelectQueryInterface {
   protected $connection;
 
   /**
+   * A unique identifier for this query object.
+   */
+  protected $uniqueIdentifier;
+
+  /**
    * The placeholder counter.
    */
   protected $placeholder = 0;
 
   public function __construct(SelectQueryInterface $query, DatabaseConnection $connection) {
+    $this->uniqueIdentifier = uniqid('', TRUE);
     $this->query = $query;
     $this->connection = $connection;
   }
 
-  /* Implementations of QueryPlaceholderInterface. */
+  /**
+   * Implements QueryPlaceholderInterface::uniqueIdentifier().
+   */
+  public function uniqueIdentifier() {
+    return $this->uniqueIdentifier;
+  }
 
+  /**
+   * Implements QueryPlaceholderInterface::nextPlaceholder().
+   */
   public function nextPlaceholder() {
     return $this->placeholder++;
   }
@@ -577,11 +591,13 @@ class SelectQueryExtender implements SelectQueryInterface {
   }
 
   public function hasAllTags() {
-    return call_user_func_array(array($this->query, 'hasAllTags'), func_get_args());
+    $args = func_get_args();
+    return call_user_func_array(array($this->query, 'hasAllTags'), $args);
   }
 
   public function hasAnyTag() {
-    return call_user_func_array(array($this->query, 'hasAnyTags'), func_get_args());
+    $args = func_get_args();
+    return call_user_func_array(array($this->query, 'hasAnyTag'), $args);
   }
 
   public function addMetaData($key, $object) {
@@ -613,23 +629,27 @@ class SelectQueryExtender implements SelectQueryInterface {
     return $this;
   }
 
-  public function compile(DatabaseConnection $connection, QueryPlaceholderInterface $queryPlaceholder = NULL) {
-    return $this->condition->compile($connection, isset($queryPlaceholder) ? $queryPlaceholder : $this);
+  public function compile(DatabaseConnection $connection, QueryPlaceholderInterface $queryPlaceholder) {
+    return $this->query->compile($connection, $queryPlaceholder);
+  }
+
+  public function compiled() {
+    return $this->query->compiled();
   }
 
   /* Implementations of QueryConditionInterface for the HAVING clause. */
 
   public function havingCondition($field, $value = NULL, $operator = '=') {
-    $this->query->condition($field, $value, $operator, $num_args);
+    $this->query->havingCondition($field, $value, $operator);
     return $this;
   }
 
   public function &havingConditions() {
-    return $this->having->conditions();
+    return $this->query->havingConditions();
   }
 
   public function havingArguments() {
-    return $this->having->arguments();
+    return $this->query->havingArguments();
   }
 
   public function having($snippet, $args = array()) {
@@ -773,31 +793,7 @@ class SelectQueryExtender implements SelectQueryInterface {
   }
 
   public function countQuery() {
-    // Create our new query object that we will mutate into a count query.
-    $count = clone($this);
-
-    // Zero-out existing fields and expressions.
-    $fields =& $count->getFields();
-    $fields = array();
-    $expressions =& $count->getExpressions();
-    $expressions = array();
-
-    // Also remove 'all_fields' statements, which are expanded into tablename.*
-    // when the query is executed.
-    $tables = &$count->getTables();
-    foreach ($tables as $alias => &$table) {
-      unset($table['all_fields']);
-    }
-
-    // Ordering a count query is a waste of cycles, and breaks on some
-    // databases anyway.
-    $orders = &$count->getOrderBy();
-    $orders = array();
-
-    // COUNT() is an expression, so we add that back in.
-    $count->addExpression('COUNT(*)');
-
-    return $count;
+    return $this->query->countQuery();
   }
 
   function isNull($field) {
@@ -819,12 +815,14 @@ class SelectQueryExtender implements SelectQueryInterface {
     $this->query->notExists($select);
     return $this;
   }
-  
+
   public function __toString() {
     return (string) $this->query;
   }
 
   public function __clone() {
+    $this->uniqueIdentifier = uniqid('', TRUE);
+
     // We need to deep-clone the query we're wrapping, which in turn may
     // deep-clone other objects.  Exciting!
     $this->query = clone($this->query);
@@ -966,7 +964,7 @@ class SelectQuery extends Query implements SelectQueryInterface {
    */
   protected $forUpdate = FALSE;
 
-  public function __construct($table, $alias = NULL, DatabaseConnection $connection, $options = array()) {
+  public function __construct($table, $alias, DatabaseConnection $connection, $options = array()) {
     $options['return'] = Database::RETURN_STATEMENT;
     parent::__construct($connection, $options);
     $this->where = new DatabaseCondition('AND');
@@ -986,11 +984,13 @@ class SelectQuery extends Query implements SelectQueryInterface {
   }
 
   public function hasAllTags() {
-    return !(boolean)array_diff(func_get_args(), array_keys($this->alterTags));
+    $args = func_get_args();
+    return !(boolean)array_diff($args, array_keys($this->alterTags));
   }
 
   public function hasAnyTag() {
-    return (boolean)array_intersect(func_get_args(), array_keys($this->alterTags));
+    $args = func_get_args();
+    return (boolean)array_intersect($args, array_keys($this->alterTags));
   }
 
   public function addMetaData($key, $object) {
@@ -1014,7 +1014,35 @@ class SelectQuery extends Query implements SelectQueryInterface {
   }
 
   public function arguments() {
-    return $this->where->arguments();
+    if (!$this->compiled()) {
+      return NULL;
+    }
+
+    $args = $this->where->arguments() + $this->having->arguments();
+
+    foreach ($this->tables as $table) {
+      if ($table['arguments']) {
+        $args += $table['arguments'];
+      }
+      // If this table is a subquery, grab its arguments recursively.
+      if ($table['table'] instanceof SelectQueryInterface) {
+        $args += $table['table']->arguments();
+      }
+    }
+
+    foreach ($this->expressions as $expression) {
+      if ($expression['arguments']) {
+        $args += $expression['arguments'];
+      }
+    }
+
+    // If there are any dependent queries to UNION,
+    // incorporate their arguments recursively.
+    foreach ($this->union as $union) {
+      $args += $union['query']->arguments();
+    }
+
+    return $args;
   }
 
   public function where($snippet, $args = array()) {
@@ -1041,9 +1069,45 @@ class SelectQuery extends Query implements SelectQueryInterface {
     $this->where->notExists($select);
     return $this;
   }
-  
-  public function compile(DatabaseConnection $connection, QueryPlaceholderInterface $queryPlaceholder = NULL) {
-    return $this->where->compile($connection, isset($queryPlaceholder) ? $queryPlaceholder : $this);
+
+  public function compile(DatabaseConnection $connection, QueryPlaceholderInterface $queryPlaceholder) {
+    $this->where->compile($connection, $queryPlaceholder);
+    $this->having->compile($connection, $queryPlaceholder);
+
+    foreach ($this->tables as $table) {
+      // If this table is a subquery, compile it recursively.
+      if ($table['table'] instanceof SelectQueryInterface) {
+        $table['table']->compile($connection, $queryPlaceholder);
+      }
+    }
+
+    // If there are any dependent queries to UNION, compile it recursively.
+    foreach ($this->union as $union) {
+      $union['query']->compile($connection, $queryPlaceholder);
+    }
+  }
+
+  public function compiled() {
+    if (!$this->where->compiled() || !$this->having->compiled()) {
+      return FALSE;
+    }
+
+    foreach ($this->tables as $table) {
+      // If this table is a subquery, check its status recursively.
+      if ($table['table'] instanceof SelectQueryInterface) {
+        if (!$table['table']->compiled()) {
+          return FALSE;
+        }
+      }
+    }
+
+    foreach ($this->union as $union) {
+      if (!$union['query']->compiled()) {
+        return FALSE;
+      }
+    }
+
+    return TRUE;
   }
 
   /* Implementations of QueryConditionInterface for the HAVING clause. */
@@ -1089,17 +1153,17 @@ class SelectQuery extends Query implements SelectQueryInterface {
     $this->having->isNotNull($field);
     return $this;
   }
-  
+
   public function havingExists(SelectQueryInterface $select) {
     $this->having->exists($select);
     return $this;
   }
-  
+
   public function havingNotExists(SelectQueryInterface $select) {
     $this->having->notExists($select);
     return $this;
   }
-  
+
   public function forUpdate($set = TRUE) {
     if (isset($set)) {
       $this->forUpdate = $set;
@@ -1137,33 +1201,8 @@ class SelectQuery extends Query implements SelectQueryInterface {
     if (!isset($queryPlaceholder)) {
       $queryPlaceholder = $this;
     }
-    $this->where->compile($this->connection, $queryPlaceholder);
-    $this->having->compile($this->connection, $queryPlaceholder);
-    $args = $this->where->arguments() + $this->having->arguments();
-
-    foreach ($this->tables as $table) {
-      if ($table['arguments']) {
-        $args += $table['arguments'];
-      }
-      // If this table is a subquery, grab its arguments recursively.
-      if ($table['table'] instanceof SelectQueryInterface) {
-        $args += $table['table']->getArguments($queryPlaceholder);
-      }
-    }
-
-    foreach ($this->expressions as $expression) {
-      if ($expression['arguments']) {
-        $args += $expression['arguments'];
-      }
-    }
-
-    // If there are any dependent queries to UNION,
-    // incorporate their arguments recursively.
-    foreach ($this->union as $union) {
-      $args += $union['query']->getArguments($queryPlaceholder);
-    }
-
-    return $args;
+    $this->compile($this->connection, $queryPlaceholder);
+    return $this->arguments();
   }
 
   /**
@@ -1192,6 +1231,21 @@ class SelectQuery extends Query implements SelectQueryInterface {
 
     // Modules may alter all queries or only those having a particular tag.
     if (isset($this->alterTags)) {
+      // Many contrib modules assume that query tags used for access-checking
+      // purposes follow the pattern $entity_type . '_access'. But this is
+      // not the case for taxonomy terms, since core used to add term_access
+      // instead of taxonomy_term_access to its queries. Provide backwards
+      // compatibility by adding both tags here instead of attempting to fix
+      // all contrib modules in a coordinated effort.
+      // TODO:
+      // - Extract this mechanism into a hook as part of a public (non-security)
+      //   issue.
+      // - Emit E_USER_DEPRECATED if term_access is used.
+      //   https://www.drupal.org/node/2575081
+      $term_access_tags = array('term_access' => 1, 'taxonomy_term_access' => 1);
+      if (array_intersect_key($this->alterTags, $term_access_tags)) {
+        $this->alterTags += $term_access_tags;
+      }
       $hooks = array('query');
       foreach ($this->alterTags as $tag => $value) {
         $hooks[] = 'query_' . $tag;
@@ -1346,6 +1400,8 @@ class SelectQuery extends Query implements SelectQueryInterface {
   }
 
   public function orderBy($field, $direction = 'ASC') {
+    // Only allow ASC and DESC, default to ASC.
+    $direction = strtoupper($direction) == 'DESC' ? 'DESC' : 'ASC';
     $this->order[$field] = $direction;
     return $this;
   }
@@ -1393,17 +1449,20 @@ class SelectQuery extends Query implements SelectQueryInterface {
     $count = clone($this);
 
     $group_by = $count->getGroupBy();
+    $having = $count->havingConditions();
 
-    if (!$count->distinct) {
+    if (!$count->distinct && !isset($having[0])) {
       // When not executing a distinct query, we can zero-out existing fields
-      // and expressions that are not used by a GROUP BY.  Fields listed in
-      // the GROUP BY clause need to be present in the query.
+      // and expressions that are not used by a GROUP BY or HAVING. Fields
+      // listed in a GROUP BY or HAVING clause need to be present in the
+      // query.
       $fields =& $count->getFields();
       foreach (array_keys($fields) as $field) {
         if (empty($group_by[$field])) {
           unset($fields[$field]);
         }
       }
+
       $expressions =& $count->getExpressions();
       foreach (array_keys($expressions) as $field) {
         if (empty($group_by[$field])) {
@@ -1440,9 +1499,16 @@ class SelectQuery extends Query implements SelectQueryInterface {
   }
 
   public function __toString() {
+    // For convenience, we compile the query ourselves if the caller forgot
+    // to do it. This allows constructs like "(string) $query" to work. When
+    // the query will be executed, it will be recompiled using the proper
+    // placeholder generator anyway.
+    if (!$this->compiled()) {
+      $this->compile($this->connection, $this);
+    }
 
-    // Create a comments string to prepend to the query.
-    $comments = (!empty($this->comments)) ? '/* ' . implode('; ', $this->comments) . ' */ ' : '';
+    // Create a sanitized comment string to prepend to the query.
+    $comments = $this->connection->makeComment($this->comments);
 
     // SELECT
     $query = $comments . 'SELECT ';
@@ -1454,13 +1520,16 @@ class SelectQuery extends Query implements SelectQueryInterface {
     $fields = array();
     foreach ($this->tables as $alias => $table) {
       if (!empty($table['all_fields'])) {
-        $fields[] = $this->connection->escapeTable($alias) . '.*';
+        $fields[] = $this->connection->escapeAlias($alias) . '.*';
       }
     }
     foreach ($this->fields as $alias => $field) {
+      // Note that $field['table'] holds the table alias.
+      // @see \SelectQuery::addField
+      $table = isset($field['table']) ? $this->connection->escapeAlias($field['table']) . '.' : '';
       // Always use the AS keyword for field aliases, as some
       // databases require it (e.g., PostgreSQL).
-      $fields[] = (isset($field['table']) ? $this->connection->escapeTable($field['table']) . '.' : '') . $this->connection->escapeField($field['field']) . ' AS ' . $this->connection->escapeAlias($field['alias']);
+      $fields[] = $table . $this->connection->escapeField($field['field']) . ' AS ' . $this->connection->escapeAlias($field['alias']);
     }
     foreach ($this->expressions as $alias => $expression) {
       $fields[] = $expression['expression'] . ' AS ' . $this->connection->escapeAlias($expression['alias']);
@@ -1489,7 +1558,7 @@ class SelectQuery extends Query implements SelectQueryInterface {
 
       // Don't use the AS keyword for table aliases, as some
       // databases don't support it (e.g., Oracle).
-      $query .=  $table_string . ' ' . $this->connection->escapeTable($table['alias']);
+      $query .=  $table_string . ' ' . $this->connection->escapeAlias($table['alias']);
 
       if (!empty($table['condition'])) {
         $query .= ' ON ' . $table['condition'];
@@ -1498,14 +1567,6 @@ class SelectQuery extends Query implements SelectQueryInterface {
 
     // WHERE
     if (count($this->where)) {
-      // The following line will not generate placeholders correctly if there
-      // is a subquery. Fortunately, it is also called from getArguments() first
-      // so it's not a problem in practice... unless you try to call __toString()
-      // before calling getArguments().  That is a problem that we will have to
-      // fix in Drupal 8, because it requires more refactoring than we are
-      // able to do in Drupal 7.
-      // @todo Move away from __toString() For SelectQuery compilation at least.
-      $this->where->compile($this->connection, $this);
       // There is an implicit string cast on $this->condition.
       $query .= "\nWHERE " . $this->where;
     }
@@ -1517,7 +1578,6 @@ class SelectQuery extends Query implements SelectQueryInterface {
 
     // HAVING
     if (count($this->having)) {
-      $this->having->compile($this->connection, $this);
       // There is an implicit string cast on $this->having.
       $query .= "\nHAVING " . $this->having;
     }
@@ -1570,5 +1630,5 @@ class SelectQuery extends Query implements SelectQueryInterface {
 }
 
 /**
- * @} End of "ingroup database".
+ * @} End of "addtogroup database".
  */

@@ -1,5 +1,4 @@
 <?php
-// $Id: select.inc,v 1.1 2010/11/29 19:57:57 webchick Exp $
 
 /**
  * @file
@@ -7,7 +6,7 @@
  */
 
 /**
- * @ingroup database
+ * @addtogroup database
  * @{
  */
 
@@ -81,7 +80,7 @@ class SelectQuery_pgsql extends SelectQuery {
     }
 
     // If a table loads all fields, it can not be added again. It would
-    // result in an ambigious alias error because that field would be loaded
+    // result in an ambiguous alias error because that field would be loaded
     // twice: Once through table_alias.* and once directly. If the field
     // actually belongs to a different table, it must be added manually.
     foreach ($this->tables as $table) {
@@ -91,7 +90,7 @@ class SelectQuery_pgsql extends SelectQuery {
     }
 
     // If $field contains an characters which are not allowed in a field name
-    // it is considered an expression, these can't be handeld automatically
+    // it is considered an expression, these can't be handled automatically
     // either.
     if ($this->connection->escapeField($field) != $field) {
       return $return;
@@ -104,6 +103,6 @@ class SelectQuery_pgsql extends SelectQuery {
 }
 
 /**
- * @} End of "ingroup database".
+ * @} End of "addtogroup database".
  */
 

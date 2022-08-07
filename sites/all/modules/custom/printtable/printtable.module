@@ -7,6 +7,7 @@
 /**
  * Implements hook_menu().
  */
+
 function printtable_menu() {
   $items = array();
 
@@ -29,14 +30,10 @@ function printtable_hello_page() {
  //$a;
  //$i; 
 
-$result1['printtable'] = array(
-'#type' =>'textfield' ,
-'#title' => 'enterthe table',
-    '#size' => 10,
-    '#maxlength' => 10,
-    '#required' => TRUE,
-);
-$a=2;
+
+$a=$_GET['table'];
+//echo $a;
+//die();
 
 for($i=1;$i<=15;$i++)
     {
@@ -47,3 +44,4 @@ for($i=1;$i<=15;$i++)
     }
       return ($result);
 }
+

@@ -1,5 +1,4 @@
 <?php
-// $Id: session_test.module,v 1.16 2010/11/13 17:40:09 webchick Exp $
 
 /**
  * Implements hook_menu().
@@ -63,6 +62,19 @@ function session_test_menu() {
   );
 
   return $items;
+}
+
+/**
+ * It's very unusual to do anything outside of a function / hook, but in this
+ * case we want to simulate a given session.cookie_samesite setting in php.ini
+ * or via ini_set() in settings.php. This would almost never be a good idea
+ * outside of a test scenario.
+ */
+if (isset($_SERVER['HTTP_X_SESSION_COOKIE_INI_SET'])) {
+  if (in_array($_SERVER['HTTP_X_SESSION_COOKIE_INI_SET'], array('None', 'Lax', 'Strict', '*EMPTY*'))) {
+    $value = ($_SERVER['HTTP_X_SESSION_COOKIE_INI_SET'] == '*EMPTY*') ? '' : $_SERVER['HTTP_X_SESSION_COOKIE_INI_SET'];
+    ini_set('session.cookie_samesite', $value);
+  }
 }
 
 /**

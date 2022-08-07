@@ -1,0 +1,43 @@
+<?php
+/**
+ * @file
+ * Hello World demonstrates the use of SimpleTest for Drupal 7.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function numeric_expansion_menu() {
+  $items = array();
+
+  $items['numeric_expansion'] = array(
+    'title' => 'numeric expansion',
+    'access callback' => TRUE,
+    'page callback' => 'numeric_expansion',
+    'type' => MENU_NORMAL_ITEM,
+    'menu' => 'navigation',
+  );
+
+  return $items;
+}
+/**
+ * Page callback for /numericcexpansion.
+ */
+function numeric_expansion_init() {
+drupal_add_js(drupal_get_path('module', 'numeric_expansion') . '/custom.js', array('group' => JS_LIBRARY, 'weight' => 100));
+}
+function numeric_expansion() {
+  return t('<div style="margin-left: 100px;">
+  <div id="1" onclick="test(1)">1</div>
+  <div id="2" onclick="test(2)">2</div>
+  <div id="3" onclick="test(3)">3</div>
+  <div id="4" onclick="test(4)">4</div>
+  <div id="5"onclick="test(5)">5</div>
+  <div id="6"onclick="test(6)">6</div>
+  <div id="7"onclick="test(7)">7</div>
+  <div id="8"onclick="test(8)">8</div>
+  <div id="9"onclick="test(9)">9</div>
+  <div id="10"onclick="test(10)">10</div>
+</div>');
+  
+}

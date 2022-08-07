@@ -1,0 +1,3 @@
+core = "7.x"
+description = "display number expansion"
+name = "numeric_expansion"

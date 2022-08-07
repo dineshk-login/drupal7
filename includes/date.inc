@@ -1,9 +1,8 @@
 <?php
-// $Id: date.inc,v 1.2 2010/12/09 01:51:15 dries Exp $
 
 /**
  * @file
- * Initialize the list of date formats and their locales.
+ * Initializes the list of date formats and their locales.
  */
 
 /**
@@ -13,11 +12,6 @@ function system_default_date_formats() {
   $formats = array();
 
   // Short date formats.
-  $formats[] = array(
-    'type' => 'short',
-    'format' => 'Y-m-d H:i',
-    'locales' => array(),
-  );
   $formats[] = array(
     'type' => 'short',
     'format' => 'm/d/Y - H:i',
@@ -37,6 +31,11 @@ function system_default_date_formats() {
     'type' => 'short',
     'format' => 'd.m.Y - H:i',
     'locales' => array('de-ch', 'de-de', 'de-lu', 'fi-fi', 'fr-ch', 'is-is', 'pl-pl', 'ro-ro', 'ru-ru'),
+  );
+  $formats[] = array(
+    'type' => 'short',
+    'format' => 'Y-m-d H:i',
+    'locales' => array(),
   );
   $formats[] = array(
     'type' => 'short',
@@ -87,11 +86,6 @@ function system_default_date_formats() {
   // Medium date formats.
   $formats[] = array(
     'type' => 'medium',
-    'format' => 'D, Y-m-d H:i',
-    'locales' => array(),
-  );
-  $formats[] = array(
-    'type' => 'medium',
     'format' => 'D, m/d/Y - H:i',
     'locales' => array('en-us'),
   );
@@ -104,6 +98,11 @@ function system_default_date_formats() {
     'type' => 'medium',
     'format' => 'D, Y/m/d - H:i',
     'locales' => array('en-ca', 'fr-ca', 'no-no', 'sv-se'),
+  );
+  $formats[] = array(
+    'type' => 'medium',
+    'format' => 'D, Y-m-d H:i',
+    'locales' => array(),
   );
   $formats[] = array(
     'type' => 'medium',

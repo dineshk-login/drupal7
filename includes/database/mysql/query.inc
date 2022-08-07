@@ -1,8 +1,7 @@
 <?php
-// $Id: query.inc,v 1.18 2010/06/26 01:40:05 dries Exp $
 
 /**
- * @ingroup database
+ * @addtogroup database
  * @{
  */
 
@@ -43,16 +42,21 @@ class InsertQuery_mysql extends InsertQuery {
   }
 
   public function __toString() {
-    // Create a comments string to prepend to the query.
-    $comments = (!empty($this->comments)) ? '/* ' . implode('; ', $this->comments) . ' */ ' : '';
+    // Create a sanitized comment string to prepend to the query.
+    $comments = $this->connection->makeComment($this->comments);
 
     // Default fields are always placed first for consistency.
     $insert_fields = array_merge($this->defaultFields, $this->insertFields);
 
+    if (method_exists($this->connection, 'escapeFields')) {
+      $insert_fields = $this->connection->escapeFields($insert_fields);
+    }
+
     // If we're selecting from a SelectQuery, finish building the query and
     // pass it back, as any remaining options are irrelevant.
     if (!empty($this->fromQuery)) {
-      return $comments . 'INSERT INTO {' . $this->table . '} (' . implode(', ', $insert_fields) . ') ' . $this->fromQuery;
+      $insert_fields_string = $insert_fields ? ' (' . implode(', ', $insert_fields) . ') ' : ' ';
+      return $comments . 'INSERT INTO {' . $this->table . '}' . $insert_fields_string . $this->fromQuery;
     }
 
     $query = $comments . 'INSERT INTO {' . $this->table . '} (' . implode(', ', $insert_fields) . ') VALUES ';
@@ -87,22 +91,22 @@ class InsertQuery_mysql extends InsertQuery {
   }
 }
 
-class TruncateQuery_mysql extends TruncateQuery {
+class TruncateQuery_mysql extends TruncateQuery { }
+
+class UpdateQuery_mysql extends UpdateQuery {
   public function __toString() {
-    // TRUNCATE is actually a DDL statement on MySQL, and DDL statements are
-    // not transactional, and result in an implicit COMMIT. When we are in a
-    // transaction, fallback to the slower, but transactional, DELETE.
-    if ($this->connection->inTransaction()) {
-      // Create a comments string to prepend to the query.
-      $comments = (!empty($this->comments)) ? '/* ' . implode('; ', $this->comments) . ' */ ' : '';
-      return $comments . 'DELETE FROM {' . $this->connection->escapeTable($this->table) . '}';
+    if (method_exists($this->connection, 'escapeField')) {
+      $escapedFields = array();
+      foreach ($this->fields as $field => $data) {
+        $field = $this->connection->escapeField($field);
+        $escapedFields[$field] = $data;
+      }
+      $this->fields = $escapedFields;
     }
-    else {
-      return parent::__toString();
-    }
+    return parent::__toString();
   }
 }
 
 /**
- * @} End of "ingroup database".
+ * @} End of "addtogroup database".
  */

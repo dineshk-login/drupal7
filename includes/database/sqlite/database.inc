@@ -1,5 +1,4 @@
 <?php
-// $Id: database.inc,v 1.41 2010/12/23 05:29:27 webchick Exp $
 
 /**
  * @file
@@ -7,7 +6,7 @@
  */
 
 /**
- * @ingroup database
+ * @addtogroup database
  * @{
  */
 
@@ -38,7 +37,7 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
   /**
    * All databases attached to the current database. This is used to allow
    * prefixes to be safely handled without locking the table
-   * 
+   *
    * @var array
    */
   protected $attachedDatabases = array();
@@ -47,10 +46,10 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
    * Whether or not a table has been dropped this request: the destructor will
    * only try to get rid of unnecessary databases if there is potential of them
    * being empty.
-   * 
+   *
    * This variable is set to public because DatabaseSchema_sqlite needs to
    * access it. However, it should not be manually set.
-   * 
+   *
    * @var boolean
    */
   var $tableDropped = FALSE;
@@ -60,24 +59,23 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
     $this->statementClass = NULL;
 
     // This driver defaults to transaction support, except if explicitly passed FALSE.
-    $this->transactionSupport = !isset($connection_options['transactions']) || $connection_options['transactions'] !== FALSE;
+    $this->transactionSupport = $this->transactionalDDLSupport = !isset($connection_options['transactions']) || $connection_options['transactions'] !== FALSE;
 
     $this->connectionOptions = $connection_options;
 
-    parent::__construct('sqlite:' . $connection_options['database'], '', '', array(
-      // Force column names to lower case.
-      PDO::ATTR_CASE => PDO::CASE_LOWER,
+    // Allow PDO options to be overridden.
+    $connection_options += array(
+      'pdo' => array(),
+    );
+    $connection_options['pdo'] += array(
       // Convert numeric values to strings when fetching.
       PDO::ATTR_STRINGIFY_FETCHES => TRUE,
-    ));
+    );
+    parent::__construct('sqlite:' . $connection_options['database'], '', '', $connection_options['pdo']);
 
     // Attach one database for each registered prefix.
-    $prefixes = &$this->prefixes;
-    if (!empty($this->defaultPrefix)) {
-      // Add in the default prefix, which is also attached.
-      $prefixes[] = &$this->defaultPrefix;
-    }
-    foreach ($this->prefixes as $table => &$prefix) {
+    $prefixes = $this->prefixes;
+    foreach ($prefixes as $table => &$prefix) {
       // Empty prefix means query the main database -- no need to attach anything.
       if (!empty($prefix)) {
         // Only attach the database once.
@@ -91,6 +89,8 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
         $prefix .= '.';
       }
     }
+    // Regenerate the prefixes replacement table.
+    $this->setPrefix($prefixes);
 
     // Detect support for SAVEPOINT.
     $version = $this->query('SELECT sqlite_version()')->fetchField();
@@ -106,6 +106,23 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
     $this->sqliteCreateFunction('substring', array($this, 'sqlFunctionSubstring'), 3);
     $this->sqliteCreateFunction('substring_index', array($this, 'sqlFunctionSubstringIndex'), 3);
     $this->sqliteCreateFunction('rand', array($this, 'sqlFunctionRand'));
+
+    // Enable the Write-Ahead Logging (WAL) option for SQLite if supported.
+    // @see https://www.drupal.org/node/2348137
+    // @see https://sqlite.org/wal.html
+    if (version_compare($version, '3.7') >= 0) {
+      $connection_options += array(
+        'init_commands' => array(),
+      );
+      $connection_options['init_commands'] += array(
+        'wal' => "PRAGMA journal_mode=WAL",
+      );
+    }
+
+    // Execute sqlite init_commands.
+    if (isset($connection_options['init_commands'])) {
+      $this->connection->exec(implode('; ', $connection_options['init_commands']));
+    }
   }
 
   /**
@@ -122,11 +139,11 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
         try {
           $count = $this->query('SELECT COUNT(*) FROM ' . $prefix . '.sqlite_master WHERE type = :type AND name NOT LIKE :pattern', array(':type' => 'table', ':pattern' => 'sqlite_%'))->fetchField();
 
-          // We can prune the database file if it doens't have any tables.
-          if ($count == 0) {
-            // Detach the database.
-            $this->query('DETACH DATABASE :schema', array(':schema' => $prefix));
-            // Destroy the database file.
+          // We can prune the database file if it doesn't have any tables.
+          if ($count == 0 && $this->connectionOptions['database'] != ':memory:') {
+            // Detaching the database fails at this point, but no other queries
+            // are executed after the connection is destructed so we can simply
+            // remove the database file.
             unlink($this->connectionOptions['database'] . '-' . $prefix);
           }
         }
@@ -136,6 +153,18 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
         }
       }
     }
+  }
+
+  /**
+   * Gets all the attached databases.
+   *
+   * @return array
+   *   An array of attached database names.
+   *
+   * @see DatabaseConnection_sqlite::__construct().
+   */
+  public function getAttachedDatabases() {
+    return $this->attachedDatabases;
   }
 
   /**
@@ -230,7 +259,7 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
    * expose this function to the world.
    */
   public function PDOPrepare($query, array $options = array()) {
-    return parent::prepare($query, $options);
+    return $this->connection->prepare($query, $options);
   }
 
   public function queryRange($query, $from, $count, array $args = array(), array $options = array()) {
@@ -241,9 +270,11 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
     // Generate a new temporary table name and protect it from prefixing.
     // SQLite requires that temporary tables to be non-qualified.
     $tablename = $this->generateTemporaryTableName();
-    $this->prefixes[$tablename] = '';
+    $prefixes = $this->prefixes;
+    $prefixes[$tablename] = '';
+    $this->setPrefix($prefixes);
 
-    $this->query(preg_replace('/^SELECT/i', 'CREATE TEMPORARY TABLE ' . $tablename . ' AS SELECT', $query), $args, $options);
+    $this->query('CREATE TEMPORARY TABLE ' . $tablename . ' AS ' . $query, $args, $options);
     return $tablename;
   }
 
@@ -319,7 +350,7 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
       }
     }
     if ($this->supportsTransactions()) {
-      PDO::rollBack();
+      $this->connection->rollBack();
     }
   }
 
@@ -334,7 +365,7 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
       throw new DatabaseTransactionNameNonUniqueException($name . " is already in use.");
     }
     if (!$this->inTransaction()) {
-      PDO::beginTransaction();
+      $this->connection->beginTransaction();
     }
     $this->transactionLayers[$name] = $name;
   }
@@ -359,9 +390,9 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
         // If there was any rollback() we should roll back whole transaction.
         if ($this->willRollback) {
           $this->willRollback = FALSE;
-          PDO::rollBack();
+          $this->connection->rollBack();
         }
-        elseif (!PDO::commit()) {
+        elseif (!$this->connection->commit()) {
           throw new DatabaseTransactionCommitFailedException();
         }
       }
@@ -369,6 +400,14 @@ class DatabaseConnection_sqlite extends DatabaseConnection {
         break;
       }
     }
+  }
+
+  public function utf8mb4IsActive() {
+    return TRUE;
+  }
+
+  public function utf8mb4IsSupported() {
+    return TRUE;
   }
 
 }
@@ -508,5 +547,5 @@ class DatabaseStatement_sqlite extends DatabaseStatementPrefetch implements Iter
 }
 
 /**
- * @} End of "ingroup database".
+ * @} End of "addtogroup database".
  */

@@ -1,5 +1,4 @@
 <?php
-// $Id: menu.admin.inc,v 1.90 2010/10/20 07:40:59 webchick Exp $
 
 /**
  * @file
@@ -60,6 +59,9 @@ function menu_overview_form($form, &$form_state, $menu) {
   foreach ($result as $item) {
     $links[] = $item;
   }
+  $link_count = db_query("SELECT COUNT(*) AS counter FROM {menu_links} WHERE menu_name = :menu AND link_path NOT LIKE :link_path", array(':menu' => $menu['menu_name'], ':link_path' => '%\%%'))->fetchObject();
+  $counter = intval($link_count->counter / 2 ) + 1;
+
   $tree = menu_tree_data($links);
   $node_links = array();
   menu_tree_collect_node_links($tree, $node_links);
@@ -68,7 +70,8 @@ function menu_overview_form($form, &$form_state, $menu) {
   menu_tree_check_access($tree, $node_links);
   $menu_admin = FALSE;
 
-  $form = array_merge($form, _menu_overview_tree_form($tree));
+  $delta = _menu_get_menu_weight_delta($menu['menu_name'], $counter);
+  $form = array_merge($form, _menu_overview_tree_form($tree, $delta));
   $form['#menu'] =  $menu;
 
   if (element_children($form)) {
@@ -89,8 +92,10 @@ function menu_overview_form($form, &$form_state, $menu) {
  *
  * @param $tree
  *   The menu_tree retrieved by menu_tree_data.
+ * @param $delta
+ *   The number of items to use in the menu weight selector. Defaults to 50.
  */
-function _menu_overview_tree_form($tree) {
+function _menu_overview_tree_form($tree, $delta = 50) {
   $form = &drupal_static(__FUNCTION__, array('#tree' => TRUE));
   foreach ($tree as $data) {
     $title = '';
@@ -100,7 +105,9 @@ function _menu_overview_tree_form($tree) {
       $mlid = 'mlid:' . $item['mlid'];
       $form[$mlid]['#item'] = $item;
       $form[$mlid]['#attributes'] = $item['hidden'] ? array('class' => array('menu-disabled')) : array('class' => array('menu-enabled'));
-      $form[$mlid]['title']['#markup'] = l($item['title'], $item['href'], $item['localized_options']) . ($item['hidden'] ? ' (' . t('disabled') . ')' : '');
+      $form[$mlid]['title']['#markup'] = l($item['title'], $item['href'], $item['localized_options']);
+      menu_add_link_labels($form[$mlid]['title']['#markup'], $item);
+
       $form[$mlid]['hidden'] = array(
         '#type' => 'checkbox',
         '#title' => t('Enable @title menu link', array('@title' => $item['title'])),
@@ -109,7 +116,7 @@ function _menu_overview_tree_form($tree) {
       );
       $form[$mlid]['weight'] = array(
         '#type' => 'weight',
-        '#delta' => 50,
+        '#delta' => $delta,
         '#default_value' => $item['weight'],
         '#title_display' => 'invisible',
         '#title' => t('Weight for @title', array('@title' => $item['title'])),
@@ -137,7 +144,7 @@ function _menu_overview_tree_form($tree) {
     }
 
     if ($data['below']) {
-      _menu_overview_tree_form($data['below']);
+      _menu_overview_tree_form($data['below'], $delta);
     }
   }
   return $form;
@@ -261,10 +268,21 @@ function menu_edit_item($form, &$form_state, $type, $item, $menu) {
     // This is an add form, initialize the menu link.
     $item = array('link_title' => '', 'mlid' => 0, 'plid' => 0, 'menu_name' => $menu['menu_name'], 'weight' => 0, 'link_path' => '', 'options' => array(), 'module' => 'menu', 'expanded' => 0, 'hidden' => 0, 'has_children' => 0);
   }
+  else {
+    // Get the human-readable menu title from the given menu name.
+    $titles = menu_get_menus();
+    $current_title = $titles[$item['menu_name']];
+
+    // Get the current breadcrumb and add a link to that menu's overview page.
+    $breadcrumb = menu_get_active_breadcrumb();
+    $breadcrumb[] = l($current_title, 'admin/structure/menu/manage/' . $item['menu_name']);
+    drupal_set_breadcrumb($breadcrumb);
+  }
   $form['actions'] = array('#type' => 'actions');
   $form['link_title'] = array(
     '#type' => 'textfield',
     '#title' => t('Menu link title'),
+    '#maxlength' => 255,
     '#default_value' => $item['link_title'],
     '#description' => t('The text to be used for this link in the menu.'),
     '#required' => TRUE,
@@ -287,8 +305,9 @@ function menu_edit_item($form, &$form_state, $type, $item, $menu) {
     $form['link_path'] = array(
       '#type' => 'textfield',
       '#title' => t('Path'),
+      '#maxlength' => 255,
       '#default_value' => $path,
-      '#description' => t('The path for this menu link. This can be an internal Drupal path such as %add-node or an external URL such as %drupal. Enter %front to link to the front page.', array('%front' => '<front>', '%add-node' => 'node/add', '%drupal' => 'http://drupal.org')),
+      '#description' => t('The path for this menu link. This can be an internal path such as %add-node or an external URL such as %example. Enter %front to link to the front page.', array('%front' => '<front>', '%add-node' => 'node/add', '%example' => 'http://example.com')),
       '#required' => TRUE,
     );
     $form['actions']['delete'] = array(
@@ -340,10 +359,22 @@ function menu_edit_item($form, &$form_state, $type, $item, $menu) {
     '#description' => t('The maximum depth for a link and all its children is fixed at !maxdepth. Some menu links may not be available as parents if selecting them would exceed this limit.', array('!maxdepth' => MENU_MAX_DEPTH)),
     '#attributes' => array('class' => array('menu-title-select')),
   );
+  // Get number of items in all possible parent menus so the weight selector is
+  // sized appropriately.
+  $menu_names = array_keys(menu_get_menus());
+  $menu_options = array();
+  foreach ($menu_names as $menu_name) {
+    if (isset($options[$menu_name . ':0'])) {
+      $menu_options[] = $menu_name;
+    }
+  }
+  // Make sure that we always have values in menu_options.
+  $menu_options = !empty($menu_options) ? $menu_options : $menu_names;
+
   $form['weight'] = array(
     '#type' => 'weight',
     '#title' => t('Weight'),
-    '#delta' => 50,
+    '#delta' => _menu_get_menu_weight_delta($menu_options),
     '#default_value' => $item['weight'],
     '#description' => t('Optional. In the menu, the heavier links will sink and the lighter links will be positioned nearer the top.'),
   );
@@ -378,7 +409,7 @@ function menu_edit_item_validate($form, &$form_state) {
     else {
       unset($item['options']['fragment']);
     }
-    if ($item['link_path'] != $parsed_link['path']) {
+    if (isset($parsed_link['path']) && $item['link_path'] != $parsed_link['path']) {
       $item['link_path'] = $parsed_link['path'];
     }
   }
@@ -453,7 +484,6 @@ function menu_edit_menu($form, &$form_state, $type, $menu = array()) {
     '#machine_name' => array(
       'exists' => 'menu_edit_menu_name_exists',
       'source' => array('title'),
-      'label' => t('URL path'),
       'replace_pattern' => '[^a-z0-9-]+',
       'replace' => '-',
     ),
@@ -496,8 +526,7 @@ function menu_delete_menu_page($menu) {
   // System-defined menus may not be deleted.
   $system_menus = menu_list_system_menus();
   if (isset($system_menus[$menu['menu_name']])) {
-    drupal_access_denied();
-    return;
+    return MENU_ACCESS_DENIED;
   }
   return drupal_get_form('menu_delete_menu_confirm', $menu);
 }
@@ -606,8 +635,7 @@ function menu_item_delete_page($item) {
   // Links defined via hook_menu may not be deleted. Updated items are an
   // exception, as they can be broken.
   if ($item['module'] == 'system' && !$item['updated']) {
-    drupal_access_denied();
-    return;
+    return MENU_ACCESS_DENIED;
   }
   return drupal_get_form('menu_item_delete_form', $item);
 }
@@ -679,7 +707,7 @@ function menu_configure() {
     '#empty_option' => t('No Secondary links'),
     '#options' => $menu_options,
     '#tree' => FALSE,
-    '#description' => t('Select the source for the Secondary links. An advanced option allows you to use the same source for both Main links (currently %main) and Secondary links: if your source menu has two levels of hierarchy, the top level menu links will appear in the Main links, and the children of the active link will appear in the Secondary links.', array('%main' => $menu_options[$main])),
+    '#description' => t('Select the source for the Secondary links. An advanced option allows you to use the same source for both Main links (currently %main) and Secondary links: if your source menu has two levels of hierarchy, the top level menu links will appear in the Main links, and the children of the active link will appear in the Secondary links.', array('%main' => $main ? $menu_options[$main] : t('none'))),
   );
 
   return system_settings_form($form);

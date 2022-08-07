@@ -1,5 +1,4 @@
 <?php
-// $Id: system.archiver.inc,v 1.6 2010/12/30 22:33:04 webchick Exp $
 
 /**
  * @file
@@ -39,10 +38,10 @@ class ArchiverTar implements ArchiverInterface {
 
   public function extract($path, Array $files = array()) {
     if ($files) {
-      $this->tar->extractList($files, $path);
+      $this->tar->extractList($files, $path, '', FALSE, FALSE);
     }
     else {
-      $this->tar->extract($path);
+      $this->tar->extract($path, FALSE, FALSE);
     }
 
     return $this;

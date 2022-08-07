@@ -30,7 +30,7 @@ function form_example_form($form, &$form_state) {
   $form['submit_button'] = array(
     '#type' => 'submit',
     '#value' => t('Click Here!'),
-   /* $form['#action'] = url('');
+ /*  $form['#action'] = url('http://localhost/drupal/printtable?table=$form_state["input"]["text"]');
 $form['#method'] = 'get';*/
   );
   
@@ -39,21 +39,17 @@ $form['#method'] = 'get';*/
 
 
 function form_example_form_submit($form, &$form_state) {
-
-  $a =  $form_state['input']['text'];
-  $result = "";
-  for($i=1;$i<=15;$i++)
-  {
- $result = $i."*".$a."=".$i*$a."<br>";
-
-  }
+$table=$form_state['input']['text'];
+ header("Location: http://localhost/drupal/printtable?table=$table");
+ // echo $form_state['input']['text'];
+  
 
   // echo "<pre>";
   // print_r($form);
   // die;
 
   //return $result;
- $form_state['storage']['text'] =   $result;
+ //$form_state['storage']['text'] =   $result;
     // Then we set $form_state['rebuild'] to TRUE, so that the values stored in
     // $form_state['storage'] are available in the form definition.
     $form_state['rebuild'] = TRUE;

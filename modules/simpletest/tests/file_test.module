@@ -1,5 +1,4 @@
 <?php
-// $Id: file_test.module,v 1.25 2010/08/22 13:52:58 dries Exp $
 
 /**
  * @file
@@ -38,6 +37,11 @@ function file_test_stream_wrappers() {
       'class' => 'DrupalDummyStreamWrapper',
       'description' => t('Dummy wrapper for simpletest.'),
     ),
+    'dummy-remote' => array(
+      'name' => t('Dummy files (remote)'),
+      'class' => 'DrupalDummyRemoteStreamWrapper',
+      'description' => t('Dummy wrapper for simpletest (remote).'),
+    ),
   );
 }
 
@@ -72,9 +76,13 @@ function _file_test_form($form, &$form_state) {
   );
 
   $form['allow_all_extensions'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Allow all extensions?'),
-    '#default_value' => FALSE,
+    '#type' => 'radios',
+    '#options' => array(
+      'false' => 'No',
+      'empty_array' => 'Empty array',
+      'empty_string' => 'Empty string',
+    ),
+    '#default_value' => 'false',
   );
 
   $form['is_image_file'] = array(
@@ -110,8 +118,12 @@ function _file_test_form_submit(&$form, &$form_state) {
     $validators['file_validate_is_image'] = array();
   }
 
-  if ($form_state['values']['allow_all_extensions']) {
+  $allow = $form_state['values']['allow_all_extensions'];
+  if ($allow === 'empty_array') {
     $validators['file_validate_extensions'] = array();
+  }
+  elseif ($allow === 'empty_string') {
+    $validators['file_validate_extensions'] = array('');
   }
   elseif (!empty($form_state['values']['extensions'])) {
     $validators['file_validate_extensions'] = array($form_state['values']['extensions']);
@@ -134,7 +146,7 @@ function _file_test_form_submit(&$form, &$form_state) {
 /**
  * Reset/initialize the history of calls to the file_* hooks.
  *
- * @see file_test_get_calls() 
+ * @see file_test_get_calls()
  * @see file_test_reset()
  */
 function file_test_reset() {
@@ -443,3 +455,15 @@ class DrupalDummyStreamWrapper extends DrupalLocalStreamWrapper {
   }
 }
 
+/**
+ * Helper class for testing the stream wrapper registry.
+ *
+ * Dummy remote stream wrapper implementation (dummy-remote://).
+ *
+ * Basically just the public scheme but not returning a local file for realpath.
+ */
+class DrupalDummyRemoteStreamWrapper extends DrupalPublicStreamWrapper {
+  function realpath() {
+    return FALSE;
+  }
+}
