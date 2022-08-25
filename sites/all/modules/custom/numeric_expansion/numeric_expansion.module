@@ -32,12 +32,12 @@ function numeric_expansion() {
   <div id="2" onclick="test(2)">2</div>
   <div id="3" onclick="test(3)">3</div>
   <div id="4" onclick="test(4)">4</div>
-  <div id="5"onclick="test(5)">5</div>
-  <div id="6"onclick="test(6)">6</div>
-  <div id="7"onclick="test(7)">7</div>
-  <div id="8"onclick="test(8)">8</div>
-  <div id="9"onclick="test(9)">9</div>
-  <div id="10"onclick="test(10)">10</div>
+  <div id="5" onclick="test(5)">5</div>
+  <div id="6" onclick="test(6)">6</div>
+  <div id="7" onclick="test(7)">7</div>
+  <div id="8" onclick="test(8)">8</div>
+  <div id="9" onclick="test(9)">9</div>
+  <div id="10" onclick="test(10)">10</div>
 </div>');
   
 }

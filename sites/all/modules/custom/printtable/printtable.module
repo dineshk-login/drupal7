@@ -22,9 +22,7 @@ function printtable_menu() {
   return $items;
 }
 
-/**
- * Page callback for /helloworld.
- */
+
 function printtable_hello_page() {
  //$result;
  //$a;

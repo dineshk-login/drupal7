@@ -1,0 +1,50 @@
+<?php
+/**
+ * @file
+ * Hello World demonstrates the use of SimpleTest for Drupal 7.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function customdisplay_menu() {
+  $items = array();
+
+  $items['testimonial_list'] = array(
+    'title' => 'testimonial_list',
+    'access callback' => TRUE,
+    'page callback' => 'testimonial',
+    'type' => MENU_LOCAL_TASK,
+    'menu' => 'navigation',
+  );
+
+  return $items;
+}
+
+/**
+ * Page callback 
+
+ */
+function testimonial() {
+drupal_set_title('display testimonial content type');
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'node')
+            ->entityCondition('bundle', 'testimonials') //your content type
+            ->propertyCondition('status', 1);
+    $result = $query->execute();
+    $nids = array_keys($result['node']);
+   // echo "<pre>"; print_r($nids); die;
+    $nodes = entity_load('node', $nids);
+    //echo "<pre>"; print_r($nodes); die;
+    //return "testing";
+    return theme('testimonial', array('nodes' => $nodes)); //From here you are calling mydownload_theme function 
+}
+function customdisplay_theme() {
+  return array(
+    'testimonial' => array(
+      'template' => 'customdisplay',  //you have assigned html file here
+      'arguments' => array('nodes'=>NULL) // Variable passed to html file. NULL is only placeholder
+    ),
+  );               
+}
+?>
